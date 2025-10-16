@@ -5,92 +5,75 @@ import { useEffect, useRef } from "react";
 import { StrudelMirror } from '@strudel/codemirror';
 import { registerSoundfonts } from '@strudel/soundfonts';
 import { stranger_tune } from './tunes';
-
+import Controls from './components/Controls';
 let globalEditor = null;
-
-
-
-export function SetupButtons() {
-
-  document.getElementById('play').addEventListener('click', () => globalEditor.evaluate());
-  document.getElementById('stop').addEventListener('click', () => globalEditor.stop());
-  document.getElementById('process').addEventListener('click', () => {
-    Proc()
-  }
-  )
-  document.getElementById('process_play').addEventListener('click', () => {
-    if (globalEditor != null) {
-      Proc()
-      globalEditor.evaluate()
-    }
-  }
-  )
-}
-
-
-
-export function ProcAndPlay() {
-  if (globalEditor != null && globalEditor.repl.state.started == true) {
-    console.log(globalEditor)
-    Proc()
-    globalEditor.evaluate();
-  }
-}
-
-export function Proc() {
-
-  let proc_text = document.getElementById('proc').value
-  let proc_text_replaced = proc_text.replaceAll('<p1_Radio>', ProcessText);
-  ProcessText(proc_text);
-  globalEditor.setCode(proc_text_replaced)
-}
-
-export function ProcessText(match, ...args) {
-
-  let replace = ""
-  if (document.getElementById('flexRadioDefault2').checked) {
-    replace = "_"
-  }
-
-  return replace
-}
 
 export default function StrudelDemo() {
 
   const hasRun = useRef(false);
 
   useEffect(() => {
+  if (!hasRun.current) {
+    hasRun.current = true;
 
-    if (!hasRun.current) {
-      hasRun.current = true;
-      (async () => {
-        await initStrudel();
+    (async () => {
+      await initStrudel();
 
-        globalEditor = new StrudelMirror({
-          defaultOutput: webaudioOutput,
-          getTime: () => getAudioContext().currentTime,
-          transpiler,
-          root: document.getElementById('editor'),
-          prebake: async () => {
-            initAudioOnFirstClick(); // needed to make the browser happy (don't await this here..)
-            const loadModules = evalScope(
-              import('@strudel/core'),
-              import('@strudel/draw'),
-              import('@strudel/mini'),
-              import('@strudel/tonal'),
-              import('@strudel/webaudio'),
-            );
-            await Promise.all([loadModules, registerSynthSounds(), registerSoundfonts()]);
-          },
-        });
-        Proc()
-      })();
-      document.getElementById('proc').value = stranger_tune
-      SetupButtons()
-    }
+      globalEditor = new StrudelMirror({
+        defaultOutput: webaudioOutput,
+        getTime: () => getAudioContext().currentTime,
+        transpiler,
+        root: document.getElementById("editor"),
+        prebake: async () => {
+          initAudioOnFirstClick(); // needed to make the browser happy
+          const loadModules = evalScope(
+            import("@strudel/core"),
+            import("@strudel/draw"),
+            import("@strudel/mini"),
+            import("@strudel/tonal"),
+            import("@strudel/webaudio")
+          );
+          await Promise.all([
+            loadModules,
+            registerSynthSounds(),
+            registerSoundfonts(),
+          ]);
+        },
+      });
 
-  }, []);
+      // Wait a short moment to ensure StrudelMirror fully attaches, pre-processing will fail otherwise
+      setTimeout(() => {
+        document.getElementById("proc").value = stranger_tune;
+        monitorProcess(); 
+      }, 100);
+    })();
+  }
+}, []);
 
+
+  // ----- Monitor functions for buttons -----
+  const parseText = (isMuted) => (isMuted ? "_" : "");
+
+  const monitorProcess = () => {
+    const procText = document.getElementById("proc").value;
+    const replaced = procText.replaceAll("<p1_Radio>", parseText(isMutedRef.current));
+    globalEditor?.setCode(replaced);
+  };
+
+  const monitorProcPlay = () => {
+    monitorProcess();
+    globalEditor?.evaluate();
+  };
+
+  const monitorPlay = () => globalEditor?.evaluate();
+  const monitorStop = () => globalEditor?.stop();
+
+  // Toggle function state
+  const isMutedRef = useRef(false);
+  const monitorToggleP1 = (mute) => {
+    isMutedRef.current = mute;
+    monitorProcPlay();
+  };
 
   return (
     <div>
@@ -104,37 +87,16 @@ export default function StrudelDemo() {
               <textarea className="form-control" rows="15" id="proc" ></textarea>
             </div>
             <div className="col-md-4">
-
-              <nav>
-                <button id="process" className="btn btn-outline-primary">Preprocess</button>
-                <button id="process_play" className="btn btn-outline-primary">Proc & Play</button>
-                <br />
-                <button id="play" className="btn btn-outline-primary">Play</button>
-                <button id="stop" className="btn btn-outline-primary">Stop</button>
-              </nav>
+              {/* Controls element triggers monitor functions passed as props */}
+              <Controls onProcess={monitorProcess} onProcPlay={monitorProcPlay} onPlay={monitorPlay} onStop={monitorStop} onToggleP1={monitorToggleP1}/>
             </div>
           </div>
           <div className="row">
             <div className="col-md-8" style={{ maxHeight: '50vh', overflowY: 'auto' }}>
               <div id="editor" />
             </div>
-            <div className="col-md-4">
-              <div className="form-check">
-                <input className="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault1" onChange={ProcAndPlay} defaultChecked />
-                <label className="form-check-label" htmlFor="flexRadioDefault1">
-                  p1: ON
-                </label>
-              </div>
-              <div className="form-check">
-                <input className="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault2" onChange={ProcAndPlay} />
-                <label className="form-check-label" htmlFor="flexRadioDefault2">
-                  p1: HUSH
-                </label>
-              </div>
-            </div>
           </div>
         </div>
-
       </main >
     </div >
   );
